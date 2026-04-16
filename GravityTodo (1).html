@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gravity Todo</title>
+<link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Pretendard','Apple SD Gothic Neo',sans-serif; background:#f2f0ea; overflow:hidden; height:100vh; user-select:none; }
+#canvas-wrap { position:fixed; inset:0; z-index:0; }
+#topbar {
+  position:fixed; top:0; left:0; right:0;
+  padding:14px 24px 10px;
+  background:rgba(242,240,234,0.96);
+  backdrop-filter:blur(10px);
+  border-bottom:1px solid #e0ddd6;
+  z-index:100; display:flex; align-items:center; gap:20px;
+  transition: border-bottom-color 0.4s, background 0.4s;
+}
+#app-title { font-size:14px; font-weight:600; color:#333; white-space:nowrap; letter-spacing:-0.02em; }
+#progress-wrap { flex:1; display:flex; flex-direction:column; gap:4px; }
+#progress-label { font-size:10px; color:#aaa; display:flex; justify-content:space-between; }
+#progress-track { height:5px; background:#e0ddd6; border-radius:99px; overflow:hidden; }
+#progress-fill { height:100%; width:0%; background:linear-gradient(90deg,#6ab04c,#44bd52); border-radius:99px; transition:width 0.5s ease; }
+#drag-hint { font-size:10px; color:#bbb; white-space:nowrap; padding:4px 10px; background:#eae8e2; border-radius:20px; border:1px solid #dedad3; }
+#gauge-wrap {
+  position:fixed; top:62px; right:14px; z-index:90;
+  display:flex; flex-direction:column; align-items:center; gap:5px;
+  opacity:0; transition:opacity 0.6s;
+}
+#gauge-wrap.show { opacity:1; }
+#gauge-label { font-size:9px; color:#aaa; letter-spacing:.05em; }
+#gauge-track { width:8px; height:90px; background:#e0ddd6; border-radius:4px; overflow:hidden; display:flex; flex-direction:column-reverse; }
+#gauge-fill { width:100%; height:0%; background:linear-gradient(0deg,#c83030,#f0a020,#f0e040); border-radius:4px; transition:height 0.5s, background 0.4s; }
+#gauge-rocks { font-size:16px; line-height:1; }
+#warn-toast {
+  position:fixed; bottom:106px; left:50%; transform:translateX(-50%) translateY(14px);
+  background:rgba(190,40,40,0.93); color:#fff;
+  padding:10px 22px; border-radius:20px; font-size:12.5px; font-weight:500;
+  z-index:150; opacity:0; transition:all 0.3s; white-space:nowrap; pointer-events:none;
+}
+#warn-toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+#collapse-overlay {
+  position:fixed; inset:0; z-index:200;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  background:rgba(0,0,0,0); pointer-events:none; transition:background 0.6s;
+}
+#collapse-overlay.active { pointer-events:all; background:rgba(0,0,0,0.6); }
+#collapse-card {
+  background:#fff; border-radius:18px; padding:34px 40px;
+  text-align:center; max-width:300px;
+  transform:scale(0.75) translateY(30px); opacity:0;
+  transition:all 0.45s cubic-bezier(.34,1.56,.64,1);
+}
+#collapse-overlay.active #collapse-card { transform:scale(1) translateY(0); opacity:1; }
+#collapse-ico { font-size:52px; margin-bottom:10px; }
+#collapse-title { font-size:20px; font-weight:600; color:#222; margin-bottom:8px; }
+#collapse-msg { font-size:13px; color:#888; line-height:1.75; margin-bottom:22px; }
+#collapse-sub { font-size:11px; color:#bbb; margin-top:8px; display:block; }
+#collapse-reset {
+  background:#222; color:#fff; border:none; border-radius:10px;
+  padding:11px 28px; font-family:inherit; font-size:13px; font-weight:500; cursor:pointer;
+  transition:background 0.15s;
+}
+#collapse-reset:hover { background:#444; }
+#input-bar {
+  position:fixed; bottom:0; left:0; right:0;
+  padding:12px 20px 18px;
+  background:rgba(242,240,234,0.97); backdrop-filter:blur(12px);
+  border-top:1px solid #e0ddd6;
+  display:flex; gap:10px; align-items:center; z-index:100;
+  transition: border-top-color 0.4s;
+}
+#task-input {
+  flex:1; border:1.5px solid #ddd; border-radius:10px; padding:10px 14px;
+  font-family:inherit; font-size:13.5px; outline:none; background:white;
+  color:#333; transition:border-color 0.2s; min-width:0;
+}
+#task-input:focus { border-color:#999; }
+#task-input::placeholder { color:#bbb; }
+#imp-group { display:flex; flex-direction:column; align-items:center; gap:4px; }
+#imp-row-label { display:flex; justify-content:space-between; width:100%; font-size:9.5px; color:#bbb; padding:0 1px; }
+#imp-btns { display:flex; gap:5px; }
+.imp-btn {
+  width:30px; height:30px; border-radius:8px; border:1.5px solid transparent;
+  font-size:11px; font-weight:600; cursor:pointer; transition:all 0.15s;
+  font-family:inherit; display:flex; align-items:center; justify-content:center;
+}
+.imp-btn[data-imp="1"] { background:#e8f4fd; color:#3a8fc5; border-color:#b5d4f4; }
+.imp-btn[data-imp="2"] { background:#e8f8eb; color:#3a9c5a; border-color:#a0dcb0; }
+.imp-btn[data-imp="3"] { background:#fff8e1; color:#c08b10; border-color:#f0d060; }
+.imp-btn[data-imp="4"] { background:#fff0e0; color:#c86020; border-color:#f0b060; }
+.imp-btn[data-imp="5"] { background:#ffe8e8; color:#c83030; border-color:#f09090; }
+.imp-btn.active { transform:scale(1.18); box-shadow:0 2px 8px rgba(0,0,0,0.13); }
+#add-btn {
+  background:#222; color:white; border:none; border-radius:10px;
+  padding:10px 20px; font-family:inherit; font-size:13px; font-weight:500;
+  cursor:pointer; transition:all 0.15s; white-space:nowrap;
+}
+#add-btn:hover { background:#444; }
+#add-btn:active { transform:scale(0.97); }
+#empty-hint {
+  position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
+  text-align:center; pointer-events:none; z-index:10; transition:opacity 0.5s;
+}
+#empty-hint .ico { font-size:38px; margin-bottom:12px; }
+#empty-hint p { font-size:13px; color:#bbb; line-height:1.7; }
+#empty-hint small { font-size:11px; color:#ccc; margin-top:8px; display:block; }
+#feature-tags {
+  position:fixed; top:62px; left:14px; z-index:90;
+  display:flex; flex-direction:column; gap:5px;
+}
+.ftag {
+  font-size:9.5px; padding:3px 9px; border-radius:10px; border:1px solid;
+  white-space:nowrap; opacity:0.7;
+}
+.ftag-red   { background:#fff0f0; color:#c03030; border-color:#f0b0b0; }
+.ftag-amber { background:#fff8e0; color:#a06010; border-color:#f0d080; }
+.ftag-blue  { background:#e8f4fd; color:#2a6090; border-color:#a0c8e8; }
+</style>
+</head>
+<body>
+
+<div id="canvas-wrap"></div>
+
+<div id="topbar">
+  <div id="app-title">⚖️ Gravity Todo</div>
+  <div id="progress-wrap">
+    <div id="progress-label">
+      <span id="prog-text">진행률</span>
+      <span id="prog-num">0 / 0</span>
+    </div>
+    <div id="progress-track"><div id="progress-fill"></div></div>
+  </div>
+  <div id="drag-hint">🖱 드래그로 중요도 변경</div>
+</div>
+
+<div id="feature-tags">
+  <div class="ftag ftag-red">💥 바위 3개 = 붕괴</div>
+  <div class="ftag ftag-amber">🧲 무거울수록 드래그 저항↑</div>
+  <div class="ftag ftag-blue">💧 고중요도 카드는 땀 흘림</div>
+</div>
+
+<div id="gauge-wrap">
+  <div id="gauge-rocks">⚖️</div>
+  <div id="gauge-track"><div id="gauge-fill"></div></div>
+  <div id="gauge-label">압력</div>
+</div>
+
+<div id="warn-toast">⚠️ 무게가 한계에 달했습니다!</div>
+
+<div id="collapse-overlay">
+  <div id="collapse-card">
+    <div id="collapse-ico">💥</div>
+    <div id="collapse-title">일정 붕괴</div>
+    <div id="collapse-msg">
+      과도한 욕심은<br>일정을 파탄낸다
+      <span id="collapse-sub">바위(🪨) 3개 이상은 감당할 수 없어요</span>
+    </div>
+    <button id="collapse-reset" onclick="doReset()">다시 시작하기 🔄</button>
+  </div>
+</div>
+
+<div id="empty-hint">
+  <div class="ico">🪨</div>
+  <p>할 일을 추가하면<br>중요도에 따라 알아서 자리를 잡아요</p>
+  <small>카드를 위아래로 드래그하면 중요도가 바뀌어요</small>
+</div>
+
+<div id="input-bar">
+  <input type="text" id="task-input" placeholder="할 일을 입력하세요..." maxlength="28">
+  <div id="imp-group">
+    <div id="imp-row-label"><span>☁ 가벼움</span><span>무거움 🪨</span></div>
+    <div id="imp-btns">
+      <button class="imp-btn" data-imp="1">1</button>
+      <button class="imp-btn" data-imp="2">2</button>
+      <button class="imp-btn active" data-imp="3">3</button>
+      <button class="imp-btn" data-imp="4">4</button>
+      <button class="imp-btn" data-imp="5">5</button>
+    </div>
+  </div>
+  <button id="add-btn">+ 추가</button>
+</div>
+
+<script>
+let selectedImp = 3;
+document.querySelectorAll('.imp-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.imp-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    selectedImp = parseInt(btn.dataset.imp);
+  });
+});
+
+const taskInput      = document.getElementById('task-input');
+const emptyHint      = document.getElementById('empty-hint');
+const progFill       = document.getElementById('progress-fill');
+const progText       = document.getElementById('prog-text');
+const progNum        = document.getElementById('prog-num');
+const gaugeWrap      = document.getElementById('gauge-wrap');
+const gaugeFill      = document.getElementById('gauge-fill');
+const gaugeRocks     = document.getElementById('gauge-rocks');
+const warnToast      = document.getElementById('warn-toast');
+const collapseOverlay= document.getElementById('collapse-overlay');
+const topbar         = document.getElementById('topbar');
+const inputBar       = document.getElementById('input-bar');
+
+const C = {
+  1: { bg:[232,244,253], bd:[150,200,240], txt:[40,110,185],  name:'☁ 깃털',  emoji:'☁️' },
+  2: { bg:[232,248,235], bd:[140,210,160], txt:[30,130,70],   name:'🌿 가벼움', emoji:'🌿' },
+  3: { bg:[255,252,228], bd:[230,200,80],  txt:[150,110,10],  name:'⚖ 보통',  emoji:'⚖️' },
+  4: { bg:[255,238,218], bd:[240,165,80],  txt:[185,85,15],   name:'🏋 무거움', emoji:'🏋️' },
+  5: { bg:[255,228,224], bd:[235,130,120], txt:[185,35,35],   name:'🪨 바위',  emoji:'🪨' },
+};
+
+let overloadState  = 'none';
+let overloadTimer  = 0;
+let cracks         = [];
+let screenShakeAmt = 0;
+let warnToastTimer = 0;
+
+window.doReset = function() {
+  overloadState  = 'none';
+  overloadTimer  = 0;
+  cracks         = [];
+  screenShakeAmt = 0;
+  warnToastTimer = 0;
+  warnToast.classList.remove('show');
+  topbar.style.borderBottomColor   = '';
+  topbar.style.background          = '';
+  inputBar.style.borderTopColor    = '';
+  collapseOverlay.classList.remove('active');
+  gaugeWrap.classList.remove('show');
+  if (window._resetItems) window._resetItems();
+};
+
+new p5((p) => {
+  let items      = [];
+  let dragItem   = null;
+  let dragOffX   = 0, dragOffY = 0;
+  let pressMouseX= 0, pressMouseY = 0;
+  let totalAdded = 0, totalDone = 0;
+
+  const TOP_PAD = 56;
+  const BOT_PAD = 90;
+
+  window._resetItems = () => {
+    items = []; totalAdded = 0; totalDone = 0;
+    emptyHint.style.opacity = '1';
+    updateUI();
+  };
+
+  function zoneY(imp) {
+    return TOP_PAD + (p.height - TOP_PAD - BOT_PAD) * (imp - 1) / 4;
+  }
+  function impFromY(y) {
+    const usable = p.height - TOP_PAD - BOT_PAD;
+    return Math.round(Math.max(0, Math.min(1, (y - TOP_PAD) / usable)) * 4) + 1;
+  }
+
+  function generateCracks() {
+    cracks = [];
+    for (let i = 0; i < p.floor(p.random(5, 8)); i++) {
+      let sx = p.random(p.width * 0.1, p.width * 0.9);
+      let sy = p.height - BOT_PAD;
+      let segs = [];
+      let cx = sx, cy = sy;
+      for (let j = 0; j < 10; j++) {
+        let nx = cx + p.random(-50, 50);
+        let ny = cy - p.random(18, 55);
+        segs.push({ x1:cx, y1:cy, x2:nx, y2:ny });
+        cx = nx; cy = ny;
+        if (cy < TOP_PAD) break;
+      }
+      cracks.push({ segs, progress:0, speed:p.random(0.05, 0.1) });
+    }
+  }
+
+  function updateUI() {
+    const active = items.filter(i => !i.done && !i.lifting && !i.collapsing);
+    const rocks  = active.filter(i => i.imp === 5).length;
+    const totalW = active.reduce((s, i) => s + i.imp, 0);
+    const maxW   = 20;
+    const ratio  = Math.min(totalW / maxW, 1);
+
+    const pct = totalAdded === 0 ? 0 : Math.round(totalDone / totalAdded * 100);
+    progFill.style.width = pct + '%';
+    progNum.textContent  = `${totalDone} / ${totalAdded}`;
+    progText.textContent = `완료율 ${pct}%`;
+
+    if (totalW > 0) gaugeWrap.classList.add('show');
+    gaugeFill.style.height = Math.round(ratio * 100) + '%';
+    gaugeRocks.textContent = rocks > 0 ? `${'🪨'.repeat(Math.min(rocks,3))}` : '⚖️';
+
+    if (ratio > 0.5) {
+      const r = Math.round(p.lerp(242, 255, (ratio - 0.5) * 2));
+      const g = Math.round(p.lerp(240, 228, (ratio - 0.5) * 2));
+      const b = Math.round(p.lerp(234, 222, (ratio - 0.5) * 2));
+      topbar.style.background = `rgba(${r},${g},${b},0.96)`;
+    } else {
+      topbar.style.background = 'rgba(242,240,234,0.96)';
+    }
+  }
+
+  class TodoItem {
+    constructor(text, imp) {
+      this.id         = ++totalAdded;
+      this.text       = text;
+      this.imp        = imp;
+      this.x          = p.width / 2 + p.random(-160, 160);
+      this.y          = TOP_PAD + 30;
+      this.vx         = 0;
+      this.vy         = p.random(1, 2);
+      this.targetY    = zoneY(imp);
+      this.done       = false;
+      this.lifting    = false;
+      this.collapsing = false;
+      this.alpha      = 0;
+      this.bobOff     = p.random(1000);
+      this.hovered    = false;
+      this.shakeT     = 0;
+      this.dragging   = false;
+      this.sweat      = [];
+      this._resize(imp);
+    }
+
+    _resize(imp) {
+      this.baseW = p.map(imp, 1, 5, 160, 240);
+      this.cw    = p.max(this.baseW, p.min(280, this.text.length * 9 + 80));
+      this.ch    = p.map(imp, 1, 5, 58, 80);
+    }
+
+    setImp(newImp) { this.imp = newImp; this.targetY = zoneY(newImp); this._resize(newImp); }
+
+    update() {
+      if (this.alpha < 255) this.alpha = Math.min(255, this.alpha + 14);
+
+      if (this.collapsing) {
+        this.vy    += 1.1 + this.imp * 0.2;
+        this.vx    += p.random(-0.15, 0.15);
+        this.x     += this.vx;
+        this.y     += this.vy;
+        this.alpha -= 4;
+        return;
+      }
+
+      if (this.lifting) {
+        this.vy -= 0.3; this.vx += p.random(-0.1, 0.1);
+        this.y  += this.vy; this.x  += this.vx;
+        this.alpha -= 5;
+        return;
+      }
+
+      if (this.shakeT > 0) this.shakeT--;
+
+      if (this.dragging) {
+        const tx  = p.mouseX - dragOffX;
+        const ty  = p.mouseY - dragOffY;
+        const lag = p.map(this.imp, 1, 5, 0.34, 0.05);
+        const px  = this.x; const py = this.y;
+        this.x    = p.lerp(this.x, tx, lag);
+        this.y    = p.lerp(this.y, ty, lag);
+        this.vx   = this.x - px;
+        this.vy   = this.y - py;
+        return;
+      }
+
+      this.vy = (this.vy + (this.targetY - this.y) * 0.04) * 0.82;
+      this.vx = (this.vx + Math.sin(p.frameCount * 0.007 + this.bobOff) * 0.12) * 0.88;
+      this.x += this.vx;
+      this.y += this.vy;
+
+      if (this.imp >= 4 && !this.done && p.random() < 0.012) {
+        this.sweat.push({
+          x: p.random(-this.cw / 2 + 20, this.cw / 2 - 20),
+          y: this.ch / 2,
+          vy: p.random(0.5, 1.5),
+          alpha: 220,
+          r: p.random(3, 5)
+        });
+      }
+      this.sweat.forEach(d => { d.vy += 0.18; d.y += d.vy; d.alpha -= 7; });
+      this.sweat = this.sweat.filter(d => d.alpha > 0);
+
+      const mg = this.cw / 2 + 16;
+      if (this.x < mg)           { this.x = mg;           this.vx *= -0.4; }
+      if (this.x > p.width - mg) { this.x = p.width - mg; this.vx *= -0.4; }
+      if (this.y < TOP_PAD + 10) { this.y = TOP_PAD + 10; this.vy *= -0.3; }
+      if (this.y > p.height - BOT_PAD - 10) { this.y = p.height - BOT_PAD - 10; this.vy *= -0.3; }
+    }
+
+    draw() {
+      if (this.alpha <= 0) return;
+      const c = C[this.imp];
+      const a = this.alpha;
+
+      p.push();
+      p.translate(this.x + (this.shakeT > 0 ? p.random(-3, 3) : 0), this.y);
+      if (this.dragging) p.rotate(p.map(this.vx, -5, 5, -0.05, 0.05));
+
+      const sh = p.map(this.imp, 1, 5, 3, 18);
+      p.noStroke();
+      p.fill(0, 0, 0, this.dragging ? 38 : 16 * (a / 255));
+      p.rect(-this.cw / 2 + sh * 0.4, -this.ch / 2 + sh, this.cw, this.ch, 16);
+
+      p.fill(c.bg[0], c.bg[1], c.bg[2], a);
+      p.stroke(c.bd[0], c.bd[1], c.bd[2], a);
+      p.strokeWeight(this.hovered || this.dragging ? 2.5 : 1.2);
+      p.rect(-this.cw / 2, -this.ch / 2, this.cw, this.ch, 16);
+
+      const barW = p.map(this.imp, 1, 5, 3, 9);
+      const barH = this.ch * 0.58;
+      p.noStroke();
+      p.fill(c.bd[0], c.bd[1], c.bd[2], a);
+      p.rect(-this.cw / 2 + 10, -barH / 2, barW, barH, 3);
+
+      const textX = -this.cw / 2 + 10 + barW + 10;
+
+      p.noStroke();
+      p.fill(this.done ? 175 : 45, this.done ? 175 : 45, this.done ? 175 : 45, a);
+      p.textFont('Pretendard,Apple SD Gothic Neo,sans-serif');
+      p.textSize(p.map(this.imp, 1, 5, 12.5, 15));
+      p.textAlign(p.LEFT, p.CENTER);
+      p.text(this.text, textX, this.ch > 70 ? -10 : -6);
+
+      if (this.done) {
+        const tw = p.textWidth(this.text);
+        p.stroke(175, 175, 175, a); p.strokeWeight(1.3);
+        p.line(textX, this.ch > 70 ? -10 : -6, textX + tw, this.ch > 70 ? -10 : -6);
+      }
+
+      p.noStroke();
+      p.fill(c.txt[0], c.txt[1], c.txt[2], a * 0.7);
+      p.textSize(10);
+      p.text(c.name, textX, this.ch > 70 ? 9 : 12);
+
+      for (let i = 0; i < 5; i++) {
+        const ds = p.map(this.imp, 1, 5, 4, 6.5);
+        if (i < this.imp) p.fill(c.bd[0], c.bd[1], c.bd[2], a);
+        else p.fill(210, 207, 200, a * 0.4);
+        p.ellipse(this.cw / 2 - 16 + i * (ds + 2.5), this.ch / 2 - 14, ds, ds);
+      }
+
+      if (this.hovered && !this.done && !this.dragging) {
+        p.fill(60, 185, 100, a * 0.92); p.stroke(40,155,80,a); p.strokeWeight(1);
+        p.ellipse(this.cw/2-18, -this.ch/2+18, 22, 22);
+        p.noStroke(); p.fill(255,a); p.textSize(12); p.textAlign(p.CENTER,p.CENTER);
+        p.text('✓', this.cw/2-18, -this.ch/2+18);
+      }
+      if (this.done && !this.lifting) {
+        p.noStroke(); p.fill(60,185,100,a*0.5); p.ellipse(this.cw/2-18,-this.ch/2+18,18,18);
+        p.fill(255,a*0.7); p.textSize(10); p.textAlign(p.CENTER,p.CENTER);
+        p.text('✓',this.cw/2-18,-this.ch/2+18);
+      }
+
+      if (this.dragging) {
+        const tx = p.mouseX - dragOffX;
+        const ty = p.mouseY - dragOffY;
+        const dist = p.dist(this.x, this.y, tx, ty);
+
+        if (dist > 8) {
+          const opacity = p.map(this.imp, 1, 5, 50, 180);
+          const sw      = p.map(this.imp, 1, 5, 0.8, 3.5);
+          p.stroke(c.bd[0], c.bd[1], c.bd[2], opacity);
+          p.strokeWeight(sw);
+          p.drawingContext.setLineDash([6, 8]);
+          p.line(0, 0, tx - this.x, ty - this.y);
+          p.drawingContext.setLineDash([]);
+          p.noStroke();
+          p.fill(c.bd[0], c.bd[1], c.bd[2], 200);
+          const dotR = p.map(this.imp, 1, 5, 5, 12);
+          p.ellipse(tx - this.x, ty - this.y, dotR, dotR);
+          if (this.imp >= 4) {
+            p.fill(c.txt[0], c.txt[1], c.txt[2], 160);
+            p.textSize(10); p.textAlign(p.CENTER, p.CENTER);
+            const midX = (tx - this.x) / 2;
+            const midY = (ty - this.y) / 2;
+            p.text(this.imp === 5 ? '🪨 무겁다…' : '🏋 끌린다', midX, midY - 12);
+          }
+        }
+
+        const curImp = impFromY(this.y);
+        const cc = C[curImp];
+        p.noStroke();
+        p.fill(cc.txt[0], cc.txt[1], cc.txt[2], 200);
+        p.textSize(11); p.textAlign(p.CENTER, p.CENTER);
+        p.text(`→ 중요도 ${curImp} ${cc.emoji}`, 0, this.ch / 2 + 18);
+      }
+
+      this.sweat.forEach(d => {
+        p.noStroke();
+        p.fill(100, 160, 230, d.alpha);
+        p.ellipse(d.x, d.y, d.r * 0.65, d.r);
+        p.fill(255, d.alpha * 0.5);
+        p.ellipse(d.x - d.r*0.2, d.y - d.r*0.25, d.r * 0.25, d.r * 0.3);
+      });
+
+      p.pop();
+    }
+
+    complete() {
+      if (this.done) return;
+      this.done = true; this.shakeT = 12;
+      setTimeout(() => {
+        this.lifting = true; this.vy = -2.2;
+        this.vx = p.random(-0.8, 0.8);
+        totalDone++;
+        updateUI();
+      }, 400);
+    }
+
+    isDead()     { return this.alpha <= 0 && (this.lifting || this.collapsing); }
+    contains(mx, my) {
+      return mx > this.x - this.cw/2 && mx < this.x + this.cw/2 &&
+             my > this.y - this.ch/2 && my < this.y + this.ch/2;
+    }
+  }
+
+  window._addTask = (text, imp) => {
+    if (overloadState === 'collapsed') return;
+    items.push(new TodoItem(text, imp));
+    emptyHint.style.opacity = '0';
+    emptyHint.style.pointerEvents = 'none';
+    updateUI();
+  };
+
+  p.setup = () => {
+    p.createCanvas(p.windowWidth, p.windowHeight).parent('canvas-wrap');
+  };
+
+  p.draw = () => {
+    const active     = items.filter(i => !i.done && !i.lifting && !i.collapsing);
+    const rockCount  = active.filter(i => i.imp === 5).length;
+    const totalW     = active.reduce((s, i) => s + i.imp, 0);
+    const stressR    = Math.min(totalW / 20, 1);
+
+    if (overloadState === 'none' && rockCount >= 3) {
+      overloadState = 'warning';
+      overloadTimer = 0;
+      screenShakeAmt = 6;
+      warnToast.classList.add('show');
+      topbar.style.borderBottomColor   = 'rgba(200,48,48,0.5)';
+      inputBar.style.borderTopColor    = 'rgba(200,48,48,0.3)';
+      warnToastTimer = 240;
+    }
+
+    if (overloadState === 'warning') {
+      if (rockCount < 3) {
+        overloadState = 'none';
+        warnToast.classList.remove('show');
+        topbar.style.borderBottomColor = '';
+        inputBar.style.borderTopColor  = '';
+        screenShakeAmt = 0;
+      } else {
+        overloadTimer++;
+        screenShakeAmt = 1.5 + Math.sin(overloadTimer * 0.18) * 1.5;
+        if (overloadTimer > 180) {
+          overloadState = 'cracking';
+          overloadTimer = 0;
+          generateCracks();
+          screenShakeAmt = 14;
+        }
+      }
+    }
+
+    if (overloadState === 'cracking') {
+      overloadTimer++;
+      screenShakeAmt = 10 + Math.sin(overloadTimer * 0.5) * 5;
+      if (overloadTimer > 90) {
+        overloadState = 'collapsed';
+        screenShakeAmt = 22;
+        items.forEach(i => {
+          if (!i.done && !i.lifting) {
+            i.collapsing = true;
+            i.vy = p.random(2, 6);
+            i.vx = p.random(-4, 4);
+          }
+        });
+        dragItem = null;
+        setTimeout(() => collapseOverlay.classList.add('active'), 900);
+      }
+    }
+
+    if (warnToastTimer > 0) {
+      warnToastTimer--;
+      if (warnToastTimer === 0) warnToast.classList.remove('show');
+    }
+
+    const bgR = Math.round(p.lerp(242, 255, stressR * 0.65));
+    const bgG = Math.round(p.lerp(240, 224, stressR * 0.55));
+    const bgB = Math.round(p.lerp(234, 218, stressR * 0.5));
+    p.background(bgR, bgG, bgB);
+
+    const sx = screenShakeAmt > 0 ? p.random(-screenShakeAmt, screenShakeAmt) : 0;
+    const sy = screenShakeAmt > 0 ? p.random(-screenShakeAmt * 0.4, screenShakeAmt * 0.4) : 0;
+    screenShakeAmt *= 0.91;
+    if (screenShakeAmt < 0.15) screenShakeAmt = 0;
+    p.translate(sx, sy);
+
+    p.noStroke();
+    for (let gx = 26; gx < p.width; gx += 26) {
+      for (let gy = TOP_PAD + 10; gy < p.height - BOT_PAD; gy += 26) {
+        const wobX = stressR > 0.4 ? Math.sin(p.frameCount * 0.07 + gx * 0.09) * stressR * 2.5 : 0;
+        const wobY = stressR > 0.4 ? Math.cos(p.frameCount * 0.07 + gy * 0.09) * stressR * 1.5 : 0;
+        p.fill(215, 212, 205, 155);
+        p.ellipse(gx + wobX, gy + wobY, 1.6, 1.6);
+      }
+    }
+
+    for (let imp = 1; imp <= 5; imp++) {
+      const zy = zoneY(imp);
+      const c  = C[imp];
+      p.stroke(c.bd[0], c.bd[1], c.bd[2], 30); p.strokeWeight(1);
+      p.drawingContext.setLineDash([5, 12]);
+      p.line(80, zy, p.width - 80, zy);
+      p.drawingContext.setLineDash([]);
+      p.noStroke();
+      p.fill(c.txt[0], c.txt[1], c.txt[2], 90); p.textSize(10);
+      p.textAlign(p.RIGHT, p.CENTER); p.text(c.name, p.width - 18, zy);
+      p.textAlign(p.LEFT,  p.CENTER); p.text(c.name, 18, zy);
+    }
+
+    if (overloadState === 'warning' || overloadState === 'cracking') {
+      const pulse = p.map(Math.sin(p.frameCount * 0.25), -1, 1, 30, 110);
+      p.stroke(200, 48, 48, pulse); p.strokeWeight(overloadState === 'cracking' ? 4 : 2);
+      p.line(0, p.height - BOT_PAD, p.width, p.height - BOT_PAD);
+    }
+
+    cracks.forEach(crack => {
+      crack.progress = Math.min(crack.progress + crack.speed, 1);
+      const drawTo   = Math.floor(crack.progress * crack.segs.length);
+      p.stroke(90, 15, 15, 160); p.strokeWeight(1.5); p.noFill();
+      for (let si = 0; si < drawTo; si++) {
+        const s = crack.segs[si];
+        p.line(s.x1, s.y1, s.x2, s.y2);
+        p.stroke(200, 60, 60, 40); p.strokeWeight(4);
+        p.line(s.x1, s.y1, s.x2, s.y2);
+        p.stroke(90, 15, 15, 160); p.strokeWeight(1.5);
+      }
+    });
+
+    let anyHov = false;
+    if (!dragItem) {
+      for (let i = items.length - 1; i >= 0; i--) {
+        const it = items[i];
+        if (it.lifting || it.done || it.collapsing) continue;
+        it.hovered = it.contains(p.mouseX, p.mouseY);
+        if (it.hovered) anyHov = true;
+      }
+    }
+    p.cursor(dragItem ? 'grabbing' : anyHov ? 'grab' : p.ARROW);
+
+    for (let i = 0; i < items.length; i++) {
+      for (let j = i + 1; j < items.length; j++) {
+        const a = items[i], b = items[j];
+        if (a.lifting || b.lifting || a.dragging || b.dragging || a.collapsing || b.collapsing) continue;
+        const minX = (a.cw + b.cw) / 2 + 14;
+        const minY = (a.ch + b.ch) / 2 + 10;
+        const dx = b.x - a.x, dy = b.y - a.y;
+        if (Math.abs(dx) < minX && Math.abs(dy) < minY) {
+          const px = (minX - Math.abs(dx)) * 0.04 * (dx >= 0 ? 1 : -1);
+          const py = (minY - Math.abs(dy)) * 0.025 * (dy >= 0 ? 1 : -1);
+          a.vx -= px; b.vx += px; a.vy -= py * 0.4; b.vy += py * 0.4;
+        }
+      }
+    }
+
+    items.filter(i => !i.dragging).forEach(i => { i.update(); i.draw(); });
+    items.filter(i =>  i.dragging).forEach(i => { i.update(); i.draw(); });
+    items = items.filter(i => !i.isDead());
+
+    p.resetMatrix();
+  };
+
+  p.mousePressed = () => {
+    if (overloadState === 'collapsed') return;
+    if (p.mouseY < TOP_PAD || p.mouseY > p.height - BOT_PAD) return;
+    pressMouseX = p.mouseX; pressMouseY = p.mouseY;
+    for (let i = items.length - 1; i >= 0; i--) {
+      const item = items[i];
+      if (item.lifting || item.done || item.collapsing) continue;
+      if (item.contains(p.mouseX, p.mouseY)) {
+        dragItem = item; item.dragging = true;
+        dragOffX = p.mouseX - item.x; dragOffY = p.mouseY - item.y;
+        return;
+      }
+    }
+  };
+
+  p.mouseReleased = () => {
+    if (!dragItem) return;
+    const mouseDist = p.dist(p.mouseX, p.mouseY, pressMouseX, pressMouseY);
+    if (mouseDist < 12) {
+      dragItem.complete();
+    } else {
+      const newImp = impFromY(dragItem.y);
+      dragItem.setImp(newImp);
+      updateUI();
+    }
+    dragItem.dragging = false;
+    dragItem = null;
+  };
+
+  p.windowResized = () => p.resizeCanvas(p.windowWidth, p.windowHeight);
+
+}, document.getElementById('canvas-wrap'));
+
+function addTask() {
+  if (overloadState === 'collapsed') return;
+  const text = taskInput.value.trim();
+  if (!text) { taskInput.focus(); return; }
+  window._addTask(text, selectedImp);
+  taskInput.value = '';
+  taskInput.focus();
+}
+
+document.getElementById('add-btn').addEventListener('click', addTask);
+taskInput.addEventListener('keydown', e => { if (e.key === 'Enter') addTask(); });
+</script>
+</body>
+</html>
